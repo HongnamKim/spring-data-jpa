@@ -14,9 +14,9 @@ spring:
     properties:
       hibernate:
         format_sql: true
-#        show_sql: true
+#        show_sql: true -> System.out 으로 로그를 남기는 것
 
 logging.level:
-  org.hibernate.SQL: debug
+  org.hibernate.SQL: debug # logger 로 로그로 남기는 것
 
 
