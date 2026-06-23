@@ -1,7 +1,6 @@
 package study.data_jpa.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -51,5 +50,17 @@ class MemberRepositoryTest {
 
     long deletedCount = memberRepository.count();
     assertThat(deletedCount).isEqualTo(0);
+  }
+
+  @Test
+  public void namedQuery() {
+    Member m1 = new Member("AAA", 10);
+    Member m2 = new Member("BBB", 20);
+    memberRepository.save(m1);
+    memberRepository.save(m2);
+
+    List<Member> result = memberRepository.findByUsername("AAA");
+    Member findMember = result.getFirst();
+    assertThat(findMember.getUsername()).isEqualTo("AAA");
   }
 }
