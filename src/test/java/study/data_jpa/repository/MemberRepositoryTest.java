@@ -2,6 +2,7 @@ package study.data_jpa.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import jakarta.persistence.EntityManager;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +20,7 @@ import study.data_jpa.entity.Team;
 class MemberRepositoryTest {
   @Autowired private MemberRepository memberRepository;
   @Autowired private TeamRepository teamRepository;
+  @Autowired private EntityManager em;
 
   @Test
   public void testMember() {
@@ -139,10 +141,13 @@ class MemberRepositoryTest {
 
     // when
     Page<Member> page = memberRepository.findByAge(age, pageRequest);
+    Page<MemberDto> response =
+        page.map(member -> new MemberDto(member.getId(), member.getUsername(), null)); // DTO 로 변환
     // long totalCount = memberRepository.totalCount(age);
 
     // then
     List<Member> content = page.getContent();
+
     long totalElements = page.getTotalElements();
 
     assertThat(content.size()).isEqualTo(3);
@@ -151,5 +156,92 @@ class MemberRepositoryTest {
     assertThat(page.getTotalPages()).isEqualTo(2);
     assertThat(page.isFirst()).isTrue();
     assertThat(page.hasNext()).isTrue();
+  }
+
+  @Test
+  public void bulkUpdate() throws Exception {
+    // given
+    memberRepository.save(new Member("member1", 10));
+    memberRepository.save(new Member("member2", 19));
+    memberRepository.save(new Member("member3", 20));
+    memberRepository.save(new Member("member4", 21));
+    memberRepository.save(new Member("member5", 40));
+    // when
+    int resultCount = memberRepository.bulkAgePlus(20);
+
+    List<Member> result = memberRepository.findByUsername("member5");
+    Member member5 = result.getFirst();
+    System.out.println("member5 = " + member5); // 벌크 수정 시 영속성 컨텍스트를 무시하고 업데이트가 실행됨
+    // findByUsername 으로 조회 시 DB 조회는 하지만(PK로 조회가 아니므로) 영속성 컨텍스트의 1차 캐시 값을 사용하기 때문에
+    // 업데이트가 반영되지 않은 age = 40 으로 남아있음.
+    // @Modifying(clearAutomatically = true) 로 벌크성 수정 시 영속성 컨텍스트를 초기
+
+    // then
+    assertThat(resultCount).isEqualTo(3);
+  }
+
+  @Test
+  public void findMemberLazy() {
+    // given
+    // member1 -> teamA
+    // member2 -> teamB
+
+    Team teamA = new Team("teamA");
+    Team teamB = new Team("teamB");
+    teamRepository.save(teamA);
+    teamRepository.save(teamB);
+
+    Member member1 = new Member("member1", 10, teamA);
+    Member member2 = new Member("member2", 10, teamB);
+    memberRepository.save(member1);
+    memberRepository.save(member2);
+
+    em.flush(); // db 반영
+    em.clear(); // 컨텍스트 초기화
+
+    // when
+    List<Member> members = memberRepository.findAll();
+
+    for (Member member : members) {
+      System.out.println("member = " + member.getUsername());
+      System.out.println(
+          "member.getTeam().getClass() = " + member.getTeam().getClass()); // 실제 객체가 아닌 프록시 객체
+      System.out.println("member.team = " + member.getTeam()); // team 을 지연 로딩으로 조회 -> N+1 문제 발생
+    }
+  }
+
+  @Test
+  public void findMemberFetchJoin() {
+    // given
+    // member1 -> teamA
+    // member2 -> teamB
+
+    Team teamA = new Team("teamA");
+    Team teamB = new Team("teamB");
+    teamRepository.save(teamA);
+    teamRepository.save(teamB);
+
+    Member member1 = new Member("member1", 10, teamA);
+    Member member2 = new Member("member2", 10, teamB);
+    memberRepository.save(member1);
+    memberRepository.save(member2);
+
+    em.flush(); // db 반영
+    em.clear(); // 컨텍스트 초기화
+
+    // when
+    // List<Member> members = memberRepository.findMemberFetchJoin();
+    // List<Member> members = memberRepository.findAll();
+    List<Member> members = memberRepository.findEntityGraphByUsername("member1");
+
+    for (Member member : members) {
+      System.out.println("member = " + member.getUsername());
+      System.out.println(
+          "member.getTeam().getClass() = "
+              + member.getTeam().getClass()); // 프록시로 채워져 있지 않고 실제 객체로 채워져 있음
+      System.out.println(
+          "member.team = "
+              + member.getTeam()); // Member 조회 시 team 을 fetch join 으로 같이 가져오므로 추가 쿼리 없음
+    }
   }
 }
